@@ -4,13 +4,29 @@
     {
       "id": "goal-init",
       "title": "omc installable from the seed through common package managers",
-      "description": "Nix, Guix, AUR, .deb and GHCR recipes exercised on ubuntu-24.04-arm with negative controls; first attested release.",
+      "description": "Nix, Guix, Arch Linux ARM PKGBUILD, .deb and GHCR recipes exercised on ubuntu-24.04-arm with negative controls; first attested release.",
       "status": "Active",
       "milestones": [
-        {"id": 1, "description": "Recipes and pins written", "completed": true},
-        {"id": 2, "description": "CI green on ubuntu-24.04-arm with failing controls", "completed": false},
-        {"id": 3, "description": "First release with attestations, SBOM and GHCR digest", "completed": false},
-        {"id": 4, "description": "AUR submission (needs Drake's AUR account)", "completed": false}
+        {
+          "id": 1,
+          "description": "Recipes and pins written",
+          "completed": true
+        },
+        {
+          "id": 2,
+          "description": "CI green on ubuntu-24.04-arm with failing controls",
+          "completed": false
+        },
+        {
+          "id": 3,
+          "description": "First release with attestations, SBOM and GHCR digest",
+          "completed": false
+        },
+        {
+          "id": 4,
+          "description": "AUR: not eligible (AUR guidelines bar packages without x86_64 support); PKGBUILD stays in-repo for Arch Linux ARM",
+          "completed": true
+        }
       ],
       "created_at": "2026-10-27T01:10:00Z",
       "updated_at": "2026-10-27T01:10:00Z"

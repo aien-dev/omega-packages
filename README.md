@@ -1,6 +1,6 @@
 # omega-packages
 
-Install `omc`, the Omega compiler, the way you already install software: Nix, Guix, Arch (AUR),
+Install `omc`, the Omega compiler, the way you already install software: Nix, Guix, Arch Linux ARM,
 Debian/Ubuntu `.deb`, a container image, or Homebrew. Every one of these recipes builds the same thing
 the same way. It starts from **seed0, a 408-byte hand-written AArch64 Linux program**, climbs four seed
 rungs (hex1 776 B, asm2 2,464 B, om4 14,224 B) to a 325,524-byte compiler, lets `omc` rebuild itself
@@ -63,7 +63,9 @@ guix build -L guix omc
       %default-channels)
 ```
 
-**Arch Linux ARM** — `aur/PKGBUILD` (not on the AUR yet):
+**Arch Linux ARM** — `aur/PKGBUILD`. It is not on the AUR, and I am not submitting it there: the
+[AUR submission guidelines](https://wiki.archlinux.org/title/AUR_submission_guidelines) do not allow
+packages that lack x86_64 support, and `omc` is AArch64 only. Build it from this repo instead:
 
 ```sh
 git clone https://github.com/aien-dev/omega-packages && cd omega-packages/aur && makepkg -si
@@ -132,7 +134,7 @@ These are packaging glue, not part of Omega. None of them writes a byte of `omc`
 | dpkg-deb | Ubuntu 24.04's | assemble the `.deb` |
 | Nix + nixpkgs | nixpkgs `3ec63636` (flake.lock) | `stdenvNoCC` shell environment for the flake |
 | GNU Guix | 1.4.0 (Ubuntu 24.04 package, in CI) | `gnu-build-system` shell environment |
-| makepkg / pacman | Arch Linux ARM (`menci/archlinuxarm`, in CI) | AUR package build |
+| makepkg / pacman | Arch Linux ARM (`menci/archlinuxarm`, in CI) | Arch package build |
 | BusyBox | `busybox:1.37.0-musl` (digest-pinned) | the container's build stage |
 | spdx-tools | 0.8.3 (CI) | validates the SBOM |
 | GitHub Actions: checkout, upload/download-artifact, attest-build-provenance, attest-sbom, docker/*, cachix/install-nix-action | tags in the workflows | CI and release |

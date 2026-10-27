@@ -2,7 +2,7 @@
   "schema_version": "1.0.0",
   "name": "omega-packages",
   "parent": "aien-dev/omega-mv@e5b32567a7aff3ce594e3254a622a846a6cd190b",
-  "purpose": "Distribution recipes for omc (Nix flake, Guix channel, AUR PKGBUILD, Debian .deb, GHCR image) that all birth omc from omega-mv's 408-byte seed with seed/omega-from-seed.sh at the pinned commit and refuse any omc whose sha256 differs from pins.env; release workflow publishes attested .deb, bare binary, SPDX SBOM and SHA256SUMS.",
+  "purpose": "Distribution recipes for omc (Nix flake, Guix channel, Arch Linux ARM PKGBUILD, Debian .deb, GHCR image) that all birth omc from omega-mv's 408-byte seed with seed/omega-from-seed.sh at the pinned commit and refuse any omc whose sha256 differs from pins.env; release workflow publishes attested .deb, bare binary, SPDX SBOM and SHA256SUMS.",
   "layer": "distribution",
   "invariants": [
     "pins.env is the single source of the omega-mv commit, archive sha256, omc sha256 and version; scripts/check-pins.sh fails CI when a recipe disagrees.",

@@ -1,0 +1,19 @@
+note hello: sum 1..10 and print "omega 55" through write
+global out uchar 16
+fn main to int
+s = ulong 0
+for i ulong 11
+s = add s i
+end
+put out 0 111
+put out 1 109
+put out 2 101
+put out 3 103
+put out 4 97
+put out 5 32
+put out 6 uchar add div s 10 48
+put out 7 uchar add rem s 10 48
+put out 8 10
+w = write 1 out 0 9
+ret 0
+end

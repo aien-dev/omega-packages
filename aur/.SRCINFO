@@ -1,0 +1,13 @@
+pkgbase = omc
+	pkgdesc = Omega compiler, born from a 408-byte hand-written seed (AArch64 Linux only)
+	pkgver = 0.0.0+git.e5b32567
+	pkgrel = 1
+	url = https://github.com/aien-dev/omega-mv
+	arch = aarch64
+	license = Apache-2.0
+	options = !strip
+	options = !debug
+	source = omega-mv-e5b32567a7aff3ce594e3254a622a846a6cd190b.tar.gz::https://github.com/aien-dev/omega-mv/archive/e5b32567a7aff3ce594e3254a622a846a6cd190b.tar.gz
+	sha256sums = c621b6cefe728d67a1a253a9d8991495406460d365dd91ea356451eb2254a95c
+
+pkgname = omc

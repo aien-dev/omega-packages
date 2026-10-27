@@ -1,0 +1,203 @@
+name: recipes
+# Builds omc from the 408-byte seed with every recipe in this repo on GitHub's ubuntu-24.04-arm runner,
+# and runs negative controls that must fail. A run dispatched with control=tampered-seed or
+# control=wrong-omc-hash makes the seed-deb job itself fail: that red run is the proof the gate bites.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      control:
+        description: "none = normal build; anything else must make seed-deb FAIL"
+        type: choice
+        options: [none, tampered-seed, wrong-omc-hash, wrong-source-hash]
+        default: none
+permissions:
+  contents: read
+jobs:
+  pins:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh scripts/check-pins.sh
+
+  seed-deb:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Birth omc from the seed (scripts/omc-from-seed.sh)
+        env:
+          CONTROL: ${{ inputs.control || 'none' }}
+        run: |
+          set -eu
+          case $CONTROL in
+            none) ;;
+            tampered-seed) export TAMPER_SEED=1 ;;
+            wrong-omc-hash) export EXPECT_OMC_SHA256=0000000000000000000000000000000000000000000000000000000000000000 ;;
+            wrong-source-hash) export EXPECT_SRC_SHA256=0000000000000000000000000000000000000000000000000000000000000000 ;;
+          esac
+          echo "control=$CONTROL"; uname -srm
+          start=$(date +%s%3N)
+          sh scripts/omc-from-seed.sh build
+          echo "wall_ms $(( $(date +%s%3N) - start ))"
+      - name: Build the .deb
+        run: sh debian/build-deb.sh build/omc dist
+      - name: dpkg -i, then compile and run examples/hello.om from a clean dir
+        run: |
+          set -eu
+          sudo dpkg -i dist/omc_*_arm64.deb
+          dpkg -s omc | sed -n '1,4p'
+          d=$(mktemp -d); cd "$d"
+          cp /usr/share/doc/omc/examples/hello.om .
+          omc < hello.om > hello; chmod +x hello
+          out=$(./hello); echo "hello prints: $out"; [ "$out" = "omega 55" ]
+          printf 'fn main to int\nret zz\nend\n' > bad.om
+          rc=0; omc < bad.om > bad || rc=$?
+          [ "$rc" != 0 ] || { echo "omc accepted bad.om"; exit 1; }
+          echo "bad.om refused, rc=$rc (expected)"
+          sudo dpkg -r omc
+      - name: SPDX SBOM, validated by spdx-tools
+        run: |
+          set -eu
+          sh scripts/sbom.sh build/omega-mv-* build/omc > dist/omc.spdx.json
+          pipx run --spec 'spdx-tools==0.8.3' pyspdxtools -i dist/omc.spdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: dist/
+
+  controls:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch the pinned archive once
+        run: |
+          . ./pins.env
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/src.tar.gz" "https://github.com/aien-dev/omega-mv/archive/$OMEGA_MV_COMMIT.tar.gz"
+      - name: "Control 1: tampered seed0.hex byte (must FAIL)"
+        run: |
+          set -u
+          rc=0; TAMPER_SEED=1 SRC_ARCHIVE="$RUNNER_TEMP/src.tar.gz" sh scripts/omc-from-seed.sh c1 2> c1.err || rc=$?
+          cat c1.err
+          [ "$rc" = 1 ] && grep -q '^FAIL seed/omega-from-seed.sh refused' c1.err && [ ! -e c1/omc ] \
+            || { echo "tampered seed was not refused (rc=$rc)"; exit 1; }
+          echo "control 1 failed as required"
+      - name: "Control 2: wrong expected omc sha256 (must FAIL)"
+        run: |
+          set -u
+          rc=0; EXPECT_OMC_SHA256=1c82480596bbdc50cda9626866209ef662d5834f278f839ff4ce0250c495029f \
+            SRC_ARCHIVE="$RUNNER_TEMP/src.tar.gz" sh scripts/omc-from-seed.sh c2 2> c2.err || rc=$?
+          cat c2.err
+          [ "$rc" = 1 ] && grep -q '^FAIL omc sha256 2c82480596bbdc50' c2.err && [ ! -e c2/omc ] \
+            || { echo "wrong omc hash was not refused (rc=$rc)"; exit 1; }
+          echo "control 2 failed as required"
+      - name: "Control 3: a changed source archive (must FAIL)"
+        run: |
+          set -u
+          cp "$RUNNER_TEMP/src.tar.gz" bad.tar.gz; printf 'x' >> bad.tar.gz
+          rc=0; SRC_ARCHIVE=bad.tar.gz sh scripts/omc-from-seed.sh c3 2> c3.err || rc=$?
+          cat c3.err
+          [ "$rc" = 1 ] && grep -q '^FAIL source archive sha256' c3.err || { echo "changed archive accepted (rc=$rc)"; exit 1; }
+          echo "control 3 failed as required"
+      - name: "Control 4: pin checker catches a drifted recipe (must FAIL)"
+        run: |
+          set -u
+          sed -i 's/2c82480596bbdc50/3c82480596bbdc50/' flake.nix
+          rc=0; sh scripts/check-pins.sh || rc=$?
+          git checkout flake.nix
+          [ "$rc" = 1 ] || { echo "drifted flake.nix passed check-pins (rc=$rc)"; exit 1; }
+          echo "control 4 failed as required"
+
+  nix:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - run: nix --version
+      - name: nix build (seed birth + pinned-hash check + hello check inside the derivation)
+        run: nix build -L .#omc && ls -l result/bin/omc && sha256sum result/bin/omc
+      - run: nix flake check -L
+      - name: nix run from a clean dir
+        run: |
+          set -eu
+          d=$(mktemp -d); cp examples/hello.om "$d"; repo=$PWD; cd "$d"
+          nix run "$repo" < hello.om > hello; chmod +x hello
+          out=$(./hello); echo "hello prints: $out"; [ "$out" = "omega 55" ]
+      - name: "Control: wrong omc hash in the flake (must FAIL)"
+        run: |
+          set -u
+          sed -i 's/omcSha256 = "2c82/omcSha256 = "3c82/' flake.nix
+          rc=0; nix build -L .#omc --no-link 2> nix.err || rc=$?
+          tail -5 nix.err; git checkout flake.nix
+          [ "$rc" != 0 ] && grep -q 'FAILED' nix.err || { echo "flake accepted a wrong hash (rc=$rc)"; exit 1; }
+          echo "nix control failed as required"
+
+  guix:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Guix (Ubuntu package) and authorize the official substitute servers
+        run: |
+          set -eu
+          sudo apt-get update -q
+          sudo apt-get install -y -q guix
+          guix --version | sed -n 1p
+          for k in /usr/share/guix/*.pub; do echo "$k"; sudo guix archive --authorize < "$k"; done
+          sudo systemctl restart guix-daemon || true
+      - name: guix build -L guix omc
+        run: |
+          set -eu
+          guix build -L guix omc --keep-failed --fallback 2>&1 | tail -40
+          out=$(guix build -L guix omc)
+          sha256sum "$out/bin/omc"
+          echo "2c82480596bbdc50cda9626866209ef662d5834f278f839ff4ce0250c495029f  $out/bin/omc" | sha256sum -c -
+          d=$(mktemp -d); cp examples/hello.om "$d"; cd "$d"
+          "$out/bin/omc" < hello.om > hello; chmod +x hello; [ "$(./hello)" = "omega 55" ]
+
+  aur:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: makepkg in Arch Linux ARM (menci/archlinuxarm), .SRCINFO must match
+        run: |
+          docker run --rm -v "$PWD/aur:/src:ro" menci/archlinuxarm:latest bash -euc '
+            uname -m
+            pacman -Syu --noconfirm --needed base-devel >/dev/null
+            useradd -m b
+            cp -r /src /home/b/omc; chown -R b /home/b/omc
+            cd /home/b/omc
+            su b -c "makepkg --printsrcinfo" | diff -u .SRCINFO -
+            su b -c "makepkg --cleanbuild --noconfirm"
+            pacman -U --noconfirm omc-*.pkg.tar.*
+            pacman -Qi omc | sed -n "1,3p"
+            cd "$(mktemp -d)"
+            printf "global out uchar 4\nfn main to int\nput out 0 111\nput out 1 107\nput out 2 10\nw = write 1 out 0 3\nret 0\nend\n" > ok.om
+            omc < ok.om > ok; chmod +x ok; [ "$(./ok)" = ok ] && echo "installed omc compiled ok.om"
+          '
+
+  docker:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the image from the seed inside BusyBox
+        run: docker buildx build --platform linux/arm64 --load -t omc:ci docker/
+      - name: The image compiles examples/hello.om
+        run: |
+          set -eu
+          docker run --rm -i omc:ci < examples/hello.om > hello; chmod +x hello
+          out=$(./hello); echo "hello prints: $out"; [ "$out" = "omega 55" ]
+      - name: "Control: wrong OMC_SHA256 build-arg (must FAIL)"
+        run: |
+          set -u
+          rc=0; docker buildx build --platform linux/arm64 --build-arg OMC_SHA256=3c82480596bbdc50cda9626866209ef662d5834f278f839ff4ce0250c495029f docker/ 2> d.err || rc=$?
+          tail -5 d.err
+          [ "$rc" != 0 ] && grep -q 'FAILED' d.err || { echo "image built with a wrong hash (rc=$rc)"; exit 1; }
+          echo "docker control failed as required"

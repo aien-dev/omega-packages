@@ -1,0 +1,4 @@
+;; Guix channel: add to ~/.config/guix/channels.scm (see README), or use `guix build -L guix omc`.
+(channel
+  (version 0)
+  (directory "guix"))

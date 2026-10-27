@@ -1,0 +1,149 @@
+name: release
+# On a v* tag: birth omc from the seed, package it, push ghcr.io/aien-dev/omc, attest everything with
+# GitHub artifact attestations (SLSA build provenance; SPDX SBOM for omc), verify the attestations with
+# `gh attestation verify`, and publish a GitHub Release carrying SHA256SUMS.
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Birth omc from the seed
+        run: sh scripts/omc-from-seed.sh build
+      - name: Assemble dist/
+        run: |
+          set -eu
+          . ./pins.env
+          mkdir -p dist
+          cp build/omc dist/omc-linux-arm64
+          sh debian/build-deb.sh build/omc dist
+          sh scripts/sbom.sh build/omega-mv-* build/omc > dist/omc.spdx.json
+          pipx run --spec 'spdx-tools==0.8.3' pyspdxtools -i dist/omc.spdx.json
+          (cd dist && sha256sum omc-linux-arm64 omc_*_arm64.deb omc.spdx.json > SHA256SUMS && cat SHA256SUMS)
+      - name: dpkg -i the .deb and compile hello.om
+        run: |
+          set -eu
+          sudo dpkg -i dist/omc_*_arm64.deb
+          d=$(mktemp -d); cp examples/hello.om "$d"; cd "$d"
+          omc < hello.om > hello; chmod +x hello; [ "$(./hello)" = "omega 55" ]
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/omc-linux-arm64
+            dist/omc_*_arm64.deb
+      - uses: actions/attest-sbom@v2
+        with:
+          subject-path: dist/omc-linux-arm64
+          sbom-path: dist/omc.spdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  image:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: tag
+        run: |
+          . ./pins.env
+          echo "tag=$(printf '%s' "$OMC_VERSION" | tr '+' '-')" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: docker
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/aien-dev/omc:${{ steps.tag.outputs.tag }}
+            ghcr.io/aien-dev/omc:latest
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/aien-dev/omc
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+      - name: The pushed image (by digest) compiles hello.om
+        run: |
+          set -eu
+          docker run --rm -i "ghcr.io/aien-dev/omc@${{ steps.push.outputs.digest }}" < examples/hello.om > hello
+          chmod +x hello; out=$(./hello); echo "hello prints: $out"; [ "$out" = "omega 55" ]
+
+  publish:
+    needs: [build, image]
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: write
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: gh attestation verify (binary, .deb, SBOM, image)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          cd dist && sha256sum -c SHA256SUMS
+          gh attestation verify omc-linux-arm64 --repo "$GITHUB_REPOSITORY"
+          gh attestation verify omc_*_arm64.deb --repo "$GITHUB_REPOSITORY"
+          gh attestation verify omc-linux-arm64 --repo "$GITHUB_REPOSITORY" --predicate-type https://spdx.dev/Document/v2.3
+          gh attestation verify "oci://ghcr.io/aien-dev/omc@${{ needs.image.outputs.digest }}" --repo "$GITHUB_REPOSITORY"
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+          TAG: ${{ needs.image.outputs.tag }}
+        run: |
+          set -eu
+          . ./pins.env
+          {
+            echo "omc $OMC_VERSION, born from the 408-byte seed of aien-dev/omega-mv at \`$OMEGA_MV_COMMIT\`."
+            echo
+            echo "AArch64 (arm64) Linux only. omc reads .om on stdin and writes a static AArch64 Linux ELF to stdout."
+            echo
+            echo '```'
+            cat dist/SHA256SUMS
+            echo '```'
+            echo
+            echo "Container: \`ghcr.io/aien-dev/omc:$TAG\` = \`ghcr.io/aien-dev/omc@$DIGEST\`"
+            echo
+            echo "Every file and the image carry a GitHub artifact attestation (SLSA build provenance); omc-linux-arm64 also carries its SPDX SBOM. Check one with:"
+            echo
+            echo '```'
+            echo 'gh attestation verify omc-linux-arm64 --repo aien-dev/omega-packages'
+            echo '```'
+          } > notes.md
+          gh release create "$GITHUB_REF_NAME" dist/omc-linux-arm64 dist/omc_*_arm64.deb dist/omc.spdx.json dist/SHA256SUMS \
+            --title "omc $OMC_VERSION" --notes-file notes.md

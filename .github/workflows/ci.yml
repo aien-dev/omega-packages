@@ -61,7 +61,8 @@ jobs:
       - name: SPDX SBOM, validated by spdx-tools
         run: |
           set -eu
-          sh scripts/sbom.sh build/omega-mv-* build/omc > dist/omc.spdx.json
+          . ./pins.env
+          sh scripts/sbom.sh "build/omega-mv-$OMEGA_MV_COMMIT" build/omc > dist/omc.spdx.json
           pipx run --spec 'spdx-tools==0.8.3' pyspdxtools -i dist/omc.spdx.json
       - uses: actions/upload-artifact@v4
         with:
@@ -157,7 +158,16 @@ jobs:
           sha256sum "$out/bin/omc"
           echo "2c82480596bbdc50cda9626866209ef662d5834f278f839ff4ce0250c495029f  $out/bin/omc" | sha256sum -c -
           d=$(mktemp -d); cp examples/hello.om "$d"; cd "$d"
-          "$out/bin/omc" < hello.om > hello; chmod +x hello; [ "$(./hello)" = "omega 55" ]
+          "$out/bin/omc" < hello.om > hello; chmod +x hello; out=$(./hello); echo "hello prints: $out"; [ "$out" = "omega 55" ]
+      - name: "Control: wrong omc hash in the Guix package (must FAIL)"
+        run: |
+          set -u
+          sed -i 's/(define %omc-sha256 "2c82/(define %omc-sha256 "3c82/' guix/aien/omega.scm
+          rc=0; guix build -L guix omc > g.log 2>&1 || rc=$?
+          git checkout guix/aien/omega.scm
+          grep -E 'FAILED|error' g.log | tail -5
+          [ "$rc" != 0 ] && grep -q 'seed/out/omc: FAILED' g.log || { echo "guix accepted a wrong hash (rc=$rc)"; exit 1; }
+          echo "guix control failed as required"
 
   aur:
     runs-on: ubuntu-24.04-arm
@@ -168,6 +178,8 @@ jobs:
         run: |
           docker run --rm -v "$PWD/aur:/src:ro" menci/archlinuxarm:latest bash -euc '
             uname -m
+            # pacman 7 sandboxes downloads with Landlock, which the runner kernel refuses inside docker.
+            sed -i "s/^\[options\]/[options]\nDisableSandbox/" /etc/pacman.conf
             pacman -Syu --noconfirm --needed base-devel >/dev/null
             useradd -m b
             cp -r /src /home/b/omc; chown -R b /home/b/omc

@@ -2,22 +2,27 @@
 
 Install `omc`, the Omega compiler, the way you already install software: Nix, Guix, Arch (AUR),
 Debian/Ubuntu `.deb`, a container image, or Homebrew. Every one of these recipes builds the same thing
-the same way: it starts from a **408-byte hand-written seed**, climbs `seed0 → hex1 → asm2 → om4 → omc`,
-lets `omc` rebuild itself until two generations are byte-identical, and then refuses the result unless
-its sha256 is exactly
+the same way. It starts from **seed0, a 408-byte hand-written AArch64 Linux program**, climbs four seed
+rungs (hex1 776 B, asm2 2,464 B, om4 14,224 B) to a 325,524-byte compiler, lets `omc` rebuild itself
+until two generations are byte-identical, and then refuses the result unless its sha256 is exactly
 
 ```
 2c82480596bbdc50cda9626866209ef662d5834f278f839ff4ce0250c495029f  omc  (325524 bytes)
 ```
 
-No C compiler, assembler or linker writes a byte of it. The build needs only `sh`, `printf`, `cat`,
-`stat`, `sed`, `sha256sum` and `cmp`; the container recipe does it with BusyBox alone. If you care
+No C compiler, assembler or linker writes a byte of that chain. The build needs only `sh`, `printf`,
+`cat`, `stat`, `sed`, `sha256sum` and `cmp`; the container recipe does it with BusyBox alone. If you care
 about trusting your toolchain, I think that is worth five minutes of your time.
 
-**Honest limits.** `omc` runs on and emits code for **AArch64 (arm64) Linux only**. On x86_64 you can
-run it under `qemu-aarch64` user emulation, and the programs it produces are AArch64 ELF files too. The
-version is `0.0.0+git.e5b32567` because omega-mv has not tagged a release yet; it means "the compiler
-at omega-mv commit `e5b32567`".
+**What this does and does not show.** The 408 bytes are a binary written as 7,903 bytes of commented hex
+text and turned into bytes by a 1,048-byte POSIX shell script (`load0.sh`); the shell's `printf` is the
+one outside tool. Each recipe here is a fixed-output reproducibility match along one build path from a
+pinned commit: it is not diverse double compilation, and it does not prove `omc` correct.
+
+**Platform.** `omc` runs on and emits code for **AArch64 (arm64) Linux only**, and every recipe here is
+arm64 Linux only. On x86_64 the only route is `qemu-aarch64` user emulation, which I have not exercised
+in this repo. The version is `0.0.0+git.e5b32567` because omega-mv has not tagged a release yet; it
+means "the compiler at omega-mv commit `e5b32567`".
 
 ## Install
 

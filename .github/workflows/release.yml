@@ -26,7 +26,7 @@ jobs:
           mkdir -p dist
           cp build/omc dist/omc-linux-arm64
           sh debian/build-deb.sh build/omc dist
-          sh scripts/sbom.sh build/omega-mv-* build/omc > dist/omc.spdx.json
+          sh scripts/sbom.sh "build/omega-mv-$OMEGA_MV_COMMIT" build/omc > dist/omc.spdx.json
           pipx run --spec 'spdx-tools==0.8.3' pyspdxtools -i dist/omc.spdx.json
           (cd dist && sha256sum omc-linux-arm64 omc_*_arm64.deb omc.spdx.json > SHA256SUMS && cat SHA256SUMS)
       - name: dpkg -i the .deb and compile hello.om

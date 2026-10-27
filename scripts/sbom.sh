@@ -20,12 +20,13 @@ while read -r kind path sha bytes; do
   [ "$kind" = input ] || continue
   got=$(sha256sum "$tree/$path" | cut -d' ' -f1)
   [ "$got" = "$sha" ] || { echo "FAIL $path sha256 $got, expected.txt $sha" >&2; exit 1; }
+  sha1=$(sha1sum "$tree/$path" | cut -d' ' -f1)
   n=$((n + 1))
   id=SPDXRef-File-seed-$n
   files="$files${files:+,}
-    {\"SPDXID\": \"$id\", \"fileName\": \"./$path\", \"checksums\": [{\"algorithm\": \"SHA256\", \"checksumValue\": \"$got\"}], \"licenseConcluded\": \"Apache-2.0\", \"copyrightText\": \"NOASSERTION\", \"comment\": \"$bytes bytes; seed-chain input\"}"
+    {\"SPDXID\": \"$id\", \"fileName\": \"./$path\", \"checksums\": [{\"algorithm\": \"SHA256\", \"checksumValue\": \"$got\"}, {\"algorithm\": \"SHA1\", \"checksumValue\": \"$sha1\"}], \"licenseConcluded\": \"Apache-2.0\", \"copyrightText\": \"NOASSERTION\", \"comment\": \"$bytes bytes; seed-chain input, path inside the omega-mv $OMEGA_MV_COMMIT archive\"}"
   rels="$rels,
-    {\"spdxElementId\": \"SPDXRef-Package-omega-mv\", \"relationshipType\": \"CONTAINS\", \"relatedSpdxElement\": \"$id\"}"
+    {\"spdxElementId\": \"SPDXRef-Package-omc\", \"relationshipType\": \"GENERATED_FROM\", \"relatedSpdxElement\": \"$id\"}"
 done < "$exp"
 [ "$n" -gt 0 ] || { echo "FAIL no input rows in $exp" >&2; exit 1; }
 

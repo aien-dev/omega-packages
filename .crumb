@@ -1,13 +1,27 @@
 {
-  "schema_version": "1.0.0",
-  "name": "omega-packages",
-  "parent": "aien-dev/omega-mv@e5b32567a7aff3ce594e3254a622a846a6cd190b",
-  "purpose": "Distribution recipes for omc (Nix flake, Guix channel, Arch Linux ARM PKGBUILD, Debian .deb, GHCR image) that all birth omc from omega-mv's 408-byte seed with seed/omega-from-seed.sh at the pinned commit and refuse any omc whose sha256 differs from pins.env; release workflow publishes attested .deb, bare binary, SPDX SBOM and SHA256SUMS.",
-  "layer": "distribution",
+  "extensions": {
+    "generated": {
+      "children": [],
+      "children_root": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiled_at": "2026-10-28T21:31:25Z",
+      "compiler": "crumb-compile/1",
+      "digest": "sha256:51568ac0434c2091c958e5229bd78f71991c9e9d5d2655378504e1f03b41abbf",
+      "evidence_files": 0,
+      "evidence_root": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "files": 20,
+      "generated_at_commit": "51f095cf57aa50b3bddbb7bac1d5d5f4adf30126",
+      "source_tree": "sha256:51fa767b8ca584a4801c25d476069ecd81972acbcbfd4cc5c265108ea82667e1"
+    }
+  },
   "invariants": [
     "pins.env is the single source of the omega-mv commit, archive sha256, omc sha256 and version; scripts/check-pins.sh fails CI when a recipe disagrees.",
     "No recipe ships an omc it did not birth from the seed and hash-check; no prebuilt binary is ever downloaded as input.",
     "Every negative control must fail; a workflow where a control passes is broken, not green.",
     "omc is AArch64 Linux only; recipes declare that and never claim other platforms."
-  ]
+  ],
+  "layer": "distribution",
+  "name": "omega-packages",
+  "parent": "aien-dev/omega-mv@e5b32567a7aff3ce594e3254a622a846a6cd190b",
+  "purpose": "Distribution recipes for omc (Nix flake, Guix channel, Arch Linux ARM PKGBUILD, Debian .deb, GHCR image) that all birth omc from omega-mv's 408-byte seed with seed/omega-from-seed.sh at the pinned commit and refuse any omc whose sha256 differs from pins.env; release workflow publishes attested .deb, bare binary, SPDX SBOM and SHA256SUMS.",
+  "schema_version": "1.0.0"
 }
